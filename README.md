@@ -18,6 +18,23 @@
 1. 前往 [OpenRouter](https://openrouter.ai/) 註冊並獲取 API 金鑰
 2. 記下你的 API 金鑰，稍後會用到
 
+### OpenRouter API 整合方式
+
+本應用程式使用 OpenAI SDK 來呼叫 OpenRouter API，這提供了更簡潔的代碼和更穩定的整合。
+
+三種可能的 OpenRouter 整合方式：
+
+1. **直接使用 OpenRouter API**：透過標準的 HTTP 請求直接呼叫 OpenRouter 端點
+2. **使用 OpenAI SDK**（目前採用）：利用官方 OpenAI Python 庫，但將 base_url 設定為 OpenRouter 的端點
+3. **使用第三方 SDK**：使用專門為 OpenRouter 開發的第三方庫
+
+我們採用 OpenAI SDK 方式的優點：
+
+- 程式碼更簡潔易讀
+- 利用 SDK 內建的輸出解析和錯誤處理
+- 穩定且經過廣泛測試的標準 API 使用方法
+- 方便切換到其他模型提供商
+
 ### 2. 設定 Zapier 整合
 
 #### Zapier Webhook 設定
