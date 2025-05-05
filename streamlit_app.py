@@ -26,7 +26,14 @@ def call_openrouter_api(api_key, prompt, model="openai/gpt-3.5-turbo"):
         "X-Title": "AI Schedule Helper",  # 改為純英文標題
     }
     
-    system_message = "你是一個行程規劃助手，請根據輸入幫我用條列式排出今日行程，確保行程有明確的時間點"
+    system_message = (
+        "你是一個行程規劃助手，請根據輸入幫我用條列式排出今日行程，"
+        "每一行請用以下格式：\n"
+        "1. **開始時間 - 結束時間** 活動名稱\n"
+        "如果沒有明確結束時間，請直接訂出最接近的『開始時間 - 結束時間』，"
+        "例如：1. **12:00 - 14:00** 聯絡客戶\n"
+        "請只輸出行程條列，不要有多餘的說明文字或結尾語。"
+    )
     
     # 構建 JSON 數據
     data = {
@@ -89,7 +96,7 @@ def call_openrouter_api(api_key, prompt, model="openai/gpt-3.5-turbo"):
         return f"API 呼叫失敗: {str(e)}"
 
 # ====== GPT 呼叫函式 ======
-def get_schedule_suggestion(user_input, model="openai/gpt-3.5-turbo"):
+def get_schedule_suggestion(user_input, model="meta-llama/llama-4-maverick:free"):
     """呼叫 API 生成行程建議"""
     try:
         # 嘗試呼叫 API
@@ -189,11 +196,10 @@ with st.sidebar:
         
         # 更新模型選擇項，使用更準確的 OpenRouter 模型 ID
         model_options = [
-            "openai/gpt-3.5-turbo",
-            "openai/gpt-4",
-            "anthropic/claude-2",
-            "anthropic/claude-instant",
-            "google/palm"
+            "meta-llama/llama-4-maverick:free",
+            "google/gemini-2.0-flash-exp:free",
+            "deepseek/deepseek-chat:free",
+            "google/gemma-3-4b-it:free"
         ]
         selected_model = st.selectbox("選擇模型", model_options, index=0)
         
