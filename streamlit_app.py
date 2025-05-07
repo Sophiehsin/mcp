@@ -33,6 +33,7 @@ def call_openrouter_api(api_key, prompt, model="openai/gpt-3.5-turbo"):
         "如果沒有明確結束時間，請直接訂出最接近的『開始時間 - 結束時間』，"
         "例如：1. **12:00 - 14:00** 聯絡客戶\n"
         "請只輸出行程條列，不要有多餘的說明文字或結尾語。"
+        "請不要產生沒有列在輸入的內容。"
     )
     
     # 構建 JSON 數據
@@ -113,13 +114,16 @@ def get_schedule_suggestion(user_input, model="meta-llama/llama-4-maverick:free"
         return error_msg
 
 # ====== Zapier 整合函式 ======
-def send_to_zapier(user_input, schedule):
-    # 準備資料
+def send_to_zapier(user_input, schedule, date=None, reminders=""):
     payload = {
         "user_input": user_input,
         "suggested_schedule": schedule,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "date": date,
+        "reminders": reminders
     }
+    if date:
+        payload["date"] = str(date)
     
     try:
         # 調試信息
@@ -160,54 +164,48 @@ st.set_page_config(page_title="AI 行程規劃助手", page_icon="📅", layout=
 # 標題與說明
 st.title("📅 AI 行程規劃助手")
 st.markdown("""
-此應用程式可以幫助你規劃今日行程，並自動同步到 Google Calendar、Notion 和發送通知。
+此應用程式可以幫助你規劃今日行程，並自動同步到 Google Calendar，並串聯 slack 發送通知。
 
 **使用流程：**
 1. 輸入你今天的計劃或想法
 2. AI 會生成建議行程表
-3. 選擇將行程同步到其他平台
+3. 編輯並確認你的行程
+4. 將行程同步到其他平台
 """)
 
 # 側邊欄配置
 with st.sidebar:
-    st.header("設定")
-    st.info("行程同步後將自動發送到以下平台：")
-    st.markdown("- ✅ Google Calendar")
-    st.markdown("- ✅ Notion 資料庫")
-    st.markdown("- ✅ 通知 (Slack/Email/LINE)")
-    
-    if OPENROUTER_API_KEY == "your_openrouter_api_key":
-        st.warning("⚠️ 尚未設定 OpenRouter API Key。請在 .streamlit/secrets.toml 文件中設定。")
-    
-    if ZAPIER_WEBHOOK_URL == "your_zapier_webhook_url":
-        st.warning("⚠️ 尚未設定 Zapier Webhook URL。請在 .streamlit/secrets.toml 文件中設定。")
-    
-    # 添加 API Key 輸入（僅用於臨時測試，不會保存）
-    with st.expander("臨時設定 API 金鑰（不會保存）"):
-        temp_api_key = st.text_input("OpenRouter API Key", type="password")
-        if temp_api_key:
-            OPENROUTER_API_KEY = temp_api_key
-            st.success("已臨時設定 API Key")
-        
-        temp_webhook = st.text_input("Zapier Webhook URL", type="password")
-        if temp_webhook:
-            ZAPIER_WEBHOOK_URL = temp_webhook
-            st.success("已臨時設定 Webhook URL")
-        
-        # 更新模型選擇項，使用更準確的 OpenRouter 模型 ID
-        model_options = [
-            "meta-llama/llama-4-maverick:free",
-            "google/gemini-2.0-flash-exp:free",
-            "deepseek/deepseek-chat:free",
-            "google/gemma-3-4b-it:free"
-        ]
-        selected_model = st.selectbox("選擇模型", model_options, index=0)
-        
-        st.info("推薦使用 openai/gpt-3.5-turbo 獲得最佳兼容性。如果嘗試其他模型出錯，請回到這個選項。")
+    st.markdown("""
+    ### 模型設定
+    """)
+    # OpenRouter 模型選擇
+    model_options = [
+        "meta-llama/llama-4-maverick:free",
+        "google/gemini-2.0-flash-exp:free",
+        "deepseek/deepseek-chat:free",
+        "google/gemma-3-4b-it:free",
+        "openai/gpt-3.5-turbo"
+    ]
+    if 'selected_model' not in st.session_state:
+        st.session_state.selected_model = model_options[0]
+    st.session_state.selected_model = st.selectbox("選擇模型", model_options, index=model_options.index(st.session_state.selected_model))
 
-# 確保選擇的模型可用
-if 'selected_model' not in locals():
-    selected_model = "openai/gpt-3.5-turbo"
+    st.markdown("---")
+    st.markdown("OpenRouter API ＆ Zapier 連線狀態")
+
+    # 調試區塊移到側邊欄最下方
+    with st.expander("調試信息"):
+        st.write("API Key 狀態:", "已設定" if OPENROUTER_API_KEY != "your_openrouter_api_key" else "未設定")
+        st.write("Webhook URL 狀態:", "已設定" if ZAPIER_WEBHOOK_URL != "your_zapier_webhook_url" else "未設定")
+        st.write("所選模型:", st.session_state.selected_model)
+        st.write("Python 版本:", sys.version)
+        st.write("操作系統:", os.name)
+        
+
+# 主頁日期選擇器（輸入框上方）
+if 'selected_date' not in st.session_state:
+    st.session_state.selected_date = datetime.now().date()
+st.session_state.selected_date = st.date_input("選擇要安排的日期", value=st.session_state.selected_date)
 
 # 主要介面
 user_input = st.text_area("請輸入你今天的想法和計劃，我會幫你排出行程表", height=150)
@@ -226,18 +224,24 @@ if generate_button:
     else:
         with st.spinner("正在生成建議行程..."):
             try:
-                # 使用選擇的模型
-                schedule = get_schedule_suggestion(user_input, selected_model)
+                # 使用側邊欄選擇的模型
+                schedule = get_schedule_suggestion(user_input, st.session_state.selected_model)
                 st.session_state.schedule = schedule
             except Exception as e:
                 st.error(f"生成行程時發生錯誤: {str(e)}")
                 st.session_state.schedule = None
 
 # 顯示生成的行程
-if st.session_state.schedule and "API 呼叫失敗" not in st.session_state.schedule and "無法" not in st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
-    st.markdown("### 📋 建議行程：")
-    st.markdown(st.session_state.schedule)
-    
+if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
+    st.markdown("### 📋 建議行程（可編輯）：")
+    if 'editable_schedule' not in st.session_state or st.session_state.editable_schedule != st.session_state.schedule:
+        st.session_state.editable_schedule = st.session_state.schedule
+    st.session_state.editable_schedule = st.text_area(
+        "你可以在這裡修改行程內容再同步到其他平台",
+        value=st.session_state.editable_schedule,
+        height=200
+    )
+
     # 同步到其他平台的按鈕
     sync_button = st.button("🔄 同步到 Google Calendar、Notion 和發送通知")
     if sync_button:
@@ -245,7 +249,12 @@ if st.session_state.schedule and "API 呼叫失敗" not in st.session_state.sche
             st.error("請先在設定中配置 API Key 和 Webhook URL")
         else:
             with st.spinner("正在同步資料..."):
-                success = send_to_zapier(user_input, st.session_state.schedule)
+                # 不再傳 reminders
+                success = send_to_zapier(
+                    user_input,
+                    st.session_state.editable_schedule,
+                    date=st.session_state.selected_date
+                )
                 if success:
                     st.session_state.sync_status = "success"
                     st.success("✅ 成功傳送至 Zapier！資料正在自動整合到各平台")
@@ -257,32 +266,3 @@ elif st.session_state.schedule:
     st.error("無法生成行程")
     st.markdown(st.session_state.schedule)
 
-# 頁尾
-st.markdown("---")
-st.markdown("使用 OpenRouter API 和 Zapier 自動化整合")
-
-# 用於調試的可展開區域
-with st.expander("調試信息"):
-    st.write("API Key 狀態:", "已設定" if OPENROUTER_API_KEY != "your_openrouter_api_key" else "未設定")
-    st.write("Webhook URL 狀態:", "已設定" if ZAPIER_WEBHOOK_URL != "your_zapier_webhook_url" else "未設定")
-    st.write("所選模型:", selected_model)
-    
-    # 測試系統環境
-    st.write("Python 版本:", sys.version)
-    st.write("操作系統:", os.name)
-    
-    # 添加 API 測試按鈕
-    if st.button("測試 API 連接"):
-        with st.spinner("測試中..."):
-            try:
-                test_result = call_openrouter_api(
-                    OPENROUTER_API_KEY, 
-                    "測試連接，請回覆 'API 運作正常'",
-                    "openai/gpt-3.5-turbo"  # 使用最穩定的模型進行測試
-                )
-                if "API 運作正常" in test_result or "運作正常" in test_result:
-                    st.success("✅ API 連接成功！回應: " + test_result)
-                else:
-                    st.warning("⚠️ API 連接可能有問題，回應: " + test_result)
-            except Exception as e:
-                st.error(f"API 測試錯誤: {str(e)}")
