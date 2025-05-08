@@ -214,7 +214,7 @@ if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
     )
 
     # 同步到其他平台的按鈕
-    sync_button = st.button("🔄 同步到 Google Calendar、Notion 和發送通知")
+    sync_button = st.button("🔄 同步到 Google Calendar & Slack 收通知")
     if sync_button:
         if TOGETHER_API_KEY == "your_together_api_key" or ZAPIER_WEBHOOK_URL == "your_zapier_webhook_url":
             st.error("請先在設定中配置 API Key 和 Webhook URL")
