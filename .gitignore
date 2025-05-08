@@ -1,8 +1,16 @@
 # Python virtual environment
 venv/
+env/
+ENV/
+.venv/
+.env/
+
+# Python cache files
 __pycache__/
 *.py[cod]
 *$py.class
+.pytest_cache/
+
 
 # Environment variables
 .env
@@ -11,6 +19,7 @@ __pycache__/
 # OS specific files
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # IDE specific files
 .idea/
@@ -18,5 +27,7 @@ Thumbs.db
 *.swp
 *.swo
 
-# Logs
-*.log 
+# Logs and local files
+*.log
+.history
+.hypothesis/

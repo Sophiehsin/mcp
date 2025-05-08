@@ -4,103 +4,77 @@ import requests
 import json
 import os
 from datetime import datetime
-import subprocess
 import sys
+from together import Together
 
 # ====== 設定區 ======
-OPENROUTER_API_KEY = st.secrets.get("OPENROUTER_API_KEY", "your_openrouter_api_key")
+TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "your_together_api_key")
+client = Together(api_key=TOGETHER_API_KEY)
 ZAPIER_WEBHOOK_URL = st.secrets.get("ZAPIER_WEBHOOK_URL", "your_zapier_webhook_url")
 
+# 全域 client 初始化
+try:
+    client = Together(api_key=TOGETHER_API_KEY) if TOGETHER_API_KEY else None
+except Exception as e:
+    st.error(f"Together client 初始化失敗: {e}")
+    client = None
+
 # ====== 標準 API 呼叫 (使用官方格式) ======
-def call_openrouter_api(api_key, prompt, model="openai/gpt-3.5-turbo"):
-    """使用完全符合 OpenRouter 官方文檔的格式呼叫 API"""
-    # 調試信息：輸入提示及其字節長度
+def call_together_api(api_key, prompt, model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"):
+    """使用 Together AI SDK 生成回應"""
     print(f"[DEBUG] Input prompt: {prompt}")
     print(f"[DEBUG] Encoded length: {len(prompt.encode('utf-8'))} bytes")
-    
-    # 確保所有標頭值僅包含 ASCII 字符
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-        "Content-Type": "application/json",  # 移除 charset=utf-8，避免中文字符
-        "HTTP-Referer": "https://streamlit.app", 
-        "X-Title": "AI Schedule Helper",  # 改為純英文標題
-    }
-    
-    system_message = (
-        "你是一個行程規劃助手，請根據輸入幫我用條列式排出今日行程，"
-        "每一行請用以下格式：\n"
-        "1. **開始時間 - 結束時間** 活動名稱\n"
-        "如果沒有明確結束時間，請直接訂出最接近的『開始時間 - 結束時間』，"
-        "例如：1. **12:00 - 14:00** 聯絡客戶\n"
-        "請只輸出行程條列，不要有多餘的說明文字或結尾語。"
-        "請不要產生沒有列在輸入的內容。"
-    )
-    
-    # 構建 JSON 數據
-    data = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": system_message
-            },
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ]
-    }
 
-    
+    if not api_key:
+        return "API 錯誤: 未設定 API Key"
+        
     try:
-        # 不要使用 data 參數，改用 json 參數讓 requests 自行處理 JSON 序列化
-        # 這樣 requests 會自動設置正確的 Content-Type 和編碼
-        response = requests.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers=headers,
-            json=data,  # 使用 json 參數而非自行處理的 data
+        # 使用全域 client
+        if not client:
+            return "API 錯誤: Together client 未初始化"
+            
+        system_message = (
+            "你是一個行程規劃助手。請將輸入的行程資訊轉換成以下固定格式：\n"
+            "1. **[開始時間] - [結束時間]** [活動名稱]\n\n"
+            "規則：\n"
+            "1. 每行都必須以數字編號開始\n"
+            "2. 時間必須用粗體標記 (**)**\n"
+            "3. 時間格式必須是 HH:MM\n"
+            "4. 如果沒有明確說明開始時間與結束時間，但是有提到與時間相關關鍵字，請直接訂出最接近的『開始時間 - 結束時間』\n"
+            "5. 如果完全沒有說明時間、也沒有提及關鍵字、只有活動名稱，使用早上九點當作開始時間，結束時間為開始時間加上\n"
+            "6. 範例輸入：早上晨會，10:30到中午客戶拜訪\n"
+            "輸出：\n"
+            "1. **09:00 - 10:00** 晨會\n"
+            "2. **10:30 - 12:00** 客戶拜訪\n\n"
+            "請直接輸出行程清單，不要加入任何其他說明文字。"
+        )
+
+        # 使用 SDK 的 chat completion
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_message},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=800
         )
         
-        # 強制設定響應編碼為 UTF-8
-        response.encoding = 'utf-8'
+        return response.choices[0].message.content
         
-        # 調試響應狀態碼和頭信息
-        print(f"[DEBUG] Response status: {response.status_code}")
-        print(f"[DEBUG] Response encoding: {response.encoding}")
-        
-        if response.status_code != 200:
-            st.error(f"API 錯誤: {response.status_code}")
-            try:
-                error_data = response.json()
-                if 'error' in error_data:
-                    return f"API 錯誤: {error_data.get('error', {}).get('message', '未知錯誤')}"
-                return f"API 返回非 200 狀態碼: {response.status_code}, 回應: {response.text[:200]}"
-            except:
-                return f"API 返回非 200 狀態碼: {response.status_code}, 回應無法解析: {response.text[:200]}"
-        
-        # 解析回應
-        result = response.json()
-        
-        if 'choices' in result and result['choices'] and 'message' in result['choices'][0]:
-            content = result['choices'][0]['message']['content']
-            print(f"[DEBUG] Response content (first 50 chars): {content[:50]}...")
-            return content
-        else:
-            st.warning("回應格式不符合預期")
-            st.json(result)
-            return "API 回應格式不符合預期，請檢查調試信息"
-                
     except Exception as e:
-        st.error(f"API 呼叫失敗: {e}")
-        st.exception(e)  # 顯示完整 traceback
-        return f"API 呼叫失敗: {str(e)}"
+        error_msg = f"API 呼叫失敗: {str(e)}"
+        st.error(error_msg)
+        print(f"[DEBUG] API error details: {str(e)}")
+        return error_msg
+
 
 # ====== GPT 呼叫函式 ======
-def get_schedule_suggestion(user_input, model="meta-llama/llama-4-maverick:free"):
-    """呼叫 API 生成行程建議"""
+def get_schedule_suggestion(user_input, model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"):
+    """呼叫 Together API 生成行程建議"""
     try:
         # 嘗試呼叫 API
-        result = call_openrouter_api(OPENROUTER_API_KEY, user_input, model)
+        result = call_together_api(TOGETHER_API_KEY, user_input, model)
         
         # 檢查結果是否包含錯誤信息
         if "API 錯誤" in result or "API 呼叫失敗" in result or "HTTP 錯誤" in result:
@@ -177,24 +151,22 @@ with st.sidebar:
     st.markdown("""
     ### 模型設定
     """)
-    # OpenRouter 模型選擇
+    # Together 模型選擇
     model_options = [
-        "meta-llama/llama-4-maverick:free",
-        "google/gemini-2.0-flash-exp:free",
-        "deepseek/deepseek-chat:free",
-        "google/gemma-3-4b-it:free",
-        "openai/gpt-3.5-turbo"
+        "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
+        "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
+        "meta-llama/Llama-Vision-Free"
     ]
     if 'selected_model' not in st.session_state:
         st.session_state.selected_model = model_options[0]
     st.session_state.selected_model = st.selectbox("選擇模型", model_options, index=model_options.index(st.session_state.selected_model))
 
     st.markdown("---")
-    st.markdown("OpenRouter API ＆ Zapier 連線狀態")
+    st.markdown("Together AI API ＆ Zapier 連線狀態")
 
     # 調試區塊移到側邊欄最下方
     with st.expander("調試信息"):
-        st.write("API Key 狀態:", "已設定" if OPENROUTER_API_KEY != "your_openrouter_api_key" else "未設定")
+        st.write("API Key 狀態:", "已設定" if TOGETHER_API_KEY != "your_together_api_key" else "未設定")
         st.write("Webhook URL 狀態:", "已設定" if ZAPIER_WEBHOOK_URL != "your_zapier_webhook_url" else "未設定")
         st.write("所選模型:", st.session_state.selected_model)
         st.write("Python 版本:", sys.version)
@@ -244,7 +216,7 @@ if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
     # 同步到其他平台的按鈕
     sync_button = st.button("🔄 同步到 Google Calendar、Notion 和發送通知")
     if sync_button:
-        if OPENROUTER_API_KEY == "your_openrouter_api_key" or ZAPIER_WEBHOOK_URL == "your_zapier_webhook_url":
+        if TOGETHER_API_KEY == "your_together_api_key" or ZAPIER_WEBHOOK_URL == "your_zapier_webhook_url":
             st.error("請先在設定中配置 API Key 和 Webhook URL")
         else:
             with st.spinner("正在同步資料..."):
