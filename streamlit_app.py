@@ -50,8 +50,7 @@ def call_openrouter_api(api_key, prompt, model="openai/gpt-3.5-turbo"):
             }
         ]
     }
-    
-    st.info("生成中...")
+
     
     try:
         # 不要使用 data 參數，改用 json 參數讓 requests 自行處理 JSON 序列化
