@@ -9,15 +9,15 @@ from together import Together
 
 # ====== 設定區 ======
 TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "your_together_api_key")
-client = Together(api_key=TOGETHER_API_KEY)
-ZAPIER_WEBHOOK_URL = st.secrets.get("ZAPIER_WEBHOOK_URL", "your_zapier_webhook_url")
+N8N_WEBHOOK_URL = st.secrets.get("N8N_WEBHOOK_URL", "your_n8n_webhook_url")
 
 # 全域 client 初始化
-try:
-    client = Together(api_key=TOGETHER_API_KEY) if TOGETHER_API_KEY else None
-except Exception as e:
-    st.error(f"Together client 初始化失敗: {e}")
-    client = None
+client = None
+if TOGETHER_API_KEY and TOGETHER_API_KEY != "your_together_api_key":
+    try:
+        client = Together(api_key=TOGETHER_API_KEY)
+    except Exception as e:
+        st.error(f"Together client 初始化失敗: {e}")
 
 # ====== 標準 API 呼叫 (使用官方格式) ======
 def call_together_api(api_key, prompt, model="meta-llama/Llama-3.3-70B-Instruct-Turbo-Free"):
@@ -86,8 +86,8 @@ def get_schedule_suggestion(user_input, model="meta-llama/Llama-3.3-70B-Instruct
         st.error(error_msg)
         return error_msg
 
-# ====== Zapier 整合函式 ======
-def send_to_zapier(user_input, schedule, date=None, reminders=""):
+# ====== N8N 整合函式 ======
+def send_to_n8n(user_input, schedule, date=None, reminders=""):
     payload = {
         "user_input": user_input,
         "suggested_schedule": schedule,
@@ -100,16 +100,16 @@ def send_to_zapier(user_input, schedule, date=None, reminders=""):
     
     try:
         # 調試信息
-        print(f"[DEBUG] Zapier payload size: {len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))} bytes")
+        print(f"[DEBUG] n8n payload size: {len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))} bytes")
         
         # 設置請求頭 - 確保只使用 ASCII 字符
         headers = {
             "Content-Type": "application/json",
         }
         
-        # 發送請求到 Zapier
+        # 發送請求到 n8n
         response = requests.post(
-            ZAPIER_WEBHOOK_URL,
+            N8N_WEBHOOK_URL,
             headers=headers,
             json=payload,  # 使用 json 參數而非 data
         )
@@ -119,15 +119,15 @@ def send_to_zapier(user_input, schedule, date=None, reminders=""):
         
         # 檢查回應
         if response.status_code == 200:
-            print(f"[DEBUG] Zapier 成功響應: {response.text[:50]}...")
+            print(f"[DEBUG] n8n 成功響應: {response.text[:50]}...")
             return True
         else:
-            st.error(f"Zapier 回應錯誤: {response.status_code}")
-            print(f"[DEBUG] Zapier 錯誤響應: {response.text[:100]}...")
+            st.error(f"n8n 回應錯誤: {response.status_code}")
+            print(f"[DEBUG] n8n 錯誤響應: {response.text[:100]}...")
             return False
             
     except Exception as e:
-        st.error(f"傳送到 Zapier 時發生錯誤: {e}")
+        st.error(f"傳送到 n8n 時發生錯誤: {e}")
         st.exception(e)  # 顯示完整 traceback
         return False
 
@@ -162,12 +162,12 @@ with st.sidebar:
     st.session_state.selected_model = st.selectbox("選擇模型", model_options, index=model_options.index(st.session_state.selected_model))
 
     st.markdown("---")
-    st.markdown("Together AI API ＆ Zapier 連線狀態")
+    st.markdown("Together AI API ＆ n8n 連線狀態")
 
     # 調試區塊移到側邊欄最下方
     with st.expander("調試信息"):
         st.write("API Key 狀態:", "已設定" if TOGETHER_API_KEY != "your_together_api_key" else "未設定")
-        st.write("Webhook URL 狀態:", "已設定" if ZAPIER_WEBHOOK_URL != "your_zapier_webhook_url" else "未設定")
+        st.write("Webhook URL 狀態:", "已設定" if N8N_WEBHOOK_URL != "your_n8n_webhook_url" else "未設定")
         st.write("所選模型:", st.session_state.selected_model)
         st.write("Python 版本:", sys.version)
         st.write("操作系統:", os.name)
@@ -205,7 +205,7 @@ if generate_button:
 # 顯示生成的行程
 if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
     st.markdown("### 📋 建議行程（可編輯）：")
-    if 'editable_schedule' not in st.session_state or st.session_state.editable_schedule != st.session_state.schedule:
+    if st.session_state.get("editable_schedule") != st.session_state.schedule:
         st.session_state.editable_schedule = st.session_state.schedule
     st.session_state.editable_schedule = st.text_area(
         "你可以在這裡修改行程內容再同步到其他平台",
@@ -216,22 +216,22 @@ if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
     # 同步到其他平台的按鈕
     sync_button = st.button("🔄 同步到 Google Calendar & Slack 收通知")
     if sync_button:
-        if TOGETHER_API_KEY == "your_together_api_key" or ZAPIER_WEBHOOK_URL == "your_zapier_webhook_url":
+        if TOGETHER_API_KEY == "your_together_api_key" or N8N_WEBHOOK_URL == "your_n8n_webhook_url":
             st.error("請先在設定中配置 API Key 和 Webhook URL")
         else:
             with st.spinner("正在同步資料..."):
                 # 不再傳 reminders
-                success = send_to_zapier(
+                success = send_to_n8n(
                     user_input,
                     st.session_state.editable_schedule,
                     date=st.session_state.selected_date
                 )
                 if success:
                     st.session_state.sync_status = "success"
-                    st.success("✅ 成功傳送至 Zapier！資料正在自動整合到各平台")
+                    st.success("✅ 成功傳送至 n8n！資料正在自動整合到各平台")
                 else:
                     st.session_state.sync_status = "error"
-                    st.error("❌ 傳送失敗，請檢查 Zapier Webhook URL 設定")
+                    st.error("❌ 傳送失敗，請檢查 n8n Webhook URL 設定")
 elif st.session_state.schedule:
     # 顯示錯誤訊息
     st.error("無法生成行程")
