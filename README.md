@@ -1,89 +1,73 @@
-# MCP AI 行程規劃助手
+# Smart Plan - AI 行程規劃助手
 
-MCP AI 行程規劃助手是一個結合 AI 智能與自動化的行程管理平台，專為現代多工生活設計。用戶只需輸入一天的計劃或想法，系統即會自動生成結構化行程表，並一鍵同步到 Google Calendar、Notion、LINE、Slack 等多個平台，實現真正的跨平台行程整合。
+MCP AI 行程規劃助手是一個結合 AI 智能與自動化的行程管理平台，專為現代多工生活設計。用戶只需輸入一天的計劃或想法，系統即會自動生成結構化行程表，並一鍵將所有活動同步到 Google Calendar。服務前端部署於 [Streamlit Cloud](https://streamlit.io/cloud)，自動化後端（n8n）則架設於 GCP VM，確保彈性與擴充性。
 
 ---
+## 專案功能試用
+網頁連結：https://daily-arrangement.streamlit.app/
 
+1. 至側邊欄登入你的 Google 帳戶
+2. 在主頁輸入你今天的計劃或想法（列點敘述、口語敘述皆可）
+3. 點擊「生成行程建議」
+4. 查看 AI 產生的條列式行程表，有需要的話可以進行編輯微調內容
+5. 點擊「同步到 Google Calendar」，即可一鍵完成同步多個活動！
+
+---
 ## 主要功能
 
 - 🤖 **AI 智能行程規劃**  
   只需輸入自然語言描述，AI 會自動解析並生成條列式、標準化的行程表（含明確時間區段）。
 
-- 🔄 **多平台自動同步**  
-  行程可自動同步到 Google Calendar、Notion 資料庫，並發送 LINE、Slack、Email 等通知，無需手動重複輸入。
+- 🔄 **Google Calendar 自動同步**  
+  行程可自動同步到 Google Calendar，並可透過 n8n workflow 擴充自動化通知。
 
 - 📝 **格式化行程輸出**  
   行程表以統一格式輸出，方便後續自動化處理與第三方服務串接。
 
 - ⚡ **一鍵自動化**  
-  透過 Zapier Webhook，實現行程自動分拆、時間解析、事件建立等全自動流程。
+  透過 n8n Webhook，實現行程自動分拆、時間解析、事件建立等全自動流程。
 
 ---
-
 ## MCP 專屬獨特性
 
-- **專為多平台協作設計**：MCP 讓你在一個介面上同時管理個人與團隊行程，並自動同步到多個常用工具。
 - **AI 輔助標準化**：所有行程皆經 AI 標準化格式處理，確保跨平台資料一致性，減少人工整理負擔。
-- **彈性自訂自動化**：可根據個人或團隊需求，透過 Zapier 設定自訂自動化流程（如自動分類、標籤、通知等）。
+- **彈性自訂自動化**：可於側邊欄選擇 TogetherAI 支援的不同語言模型進行安排。
 - **支援多語言與在地化**：行程描述可用中文或英文，AI 會自動辨識並正確解析。
 
 ---
-
-## 使用方法
-
-### 1. 本地執行
-
-1. 下載或 clone 此專案
-2. 安裝依賴：
-   ```bash
-   pip install -r requirements.txt
-   ```
-3. 設定 `.streamlit/secrets.toml`，填入你的 OpenRouter API Key 與 Zapier Webhook URL：
-   ```toml
-   OPENROUTER_API_KEY = "你的_openrouter_api_key"
-   ZAPIER_WEBHOOK_URL = "你的_zapier_webhook_url"
-   ```
-4. 啟動應用程式：
-   ```bash
-   streamlit run streamlit_app.py
-   ```
-
-### 2. 雲端部署（Streamlit Cloud）
-
-1. 將專案推送到 GitHub
-2. 在 [Streamlit Cloud](https://streamlit.io/cloud) 連接你的 repo
-3. 在 Secrets 設定中填入 API Key 與 Webhook URL
-4. 點擊 Deploy 即可
-
----
-
-## 如何使用
-
-1. 在主頁輸入你今天的計劃或想法（可用自然語言）
-2. 點擊「生成行程建議」
-3. 查看 AI 產生的條列式行程表
-4. 點擊「同步到 Google Calendar、Notion 和發送通知」即可一鍵同步
-
----
-
 ## 連動功能與自動化流程
 
 - **Google Calendar**：自動建立多個分時段活動，並正確對應開始/結束時間
-- **Notion**：自動建立行程資料庫項目，方便後續追蹤與管理
-- **LINE/Slack/Email**：自動推播行程摘要或提醒，確保不漏接重要行程
-- **Zapier**：負責行程拆解、時間解析、格式轉換等自動化處理
+- **n8n**：負責行程拆解、時間解析、格式轉換等自動化處理
+- **Slack（規劃中）**：未來將可自動推播行程摘要或提醒（如活動開始前 10 分鐘通知、每日早上 8 點無行程提醒）
+- **Notion/LINE/Email**：規劃中，歡迎貢獻
 
 ---
-
 ## 特色亮點
 
-- **一站式行程管理**：從 AI 生成到多平台同步，全部自動化
+- **一站式行程管理**：從 AI 生成到 Google Calendar 同步，全部自動化
 - **格式統一，易於擴充**：所有行程皆以標準格式輸出，方便後續串接更多自動化服務
-- **彈性自訂**：可根據個人/團隊需求，調整自動化流程與通知方式
-- **MCP 專屬優化**：針對 MCP 團隊協作與多平台需求特別優化
+- **彈性自訂**：可根據個人需求，調整自動化流程與通知方式
 
 ---
+## Slack 串接完成後可支援的功能
 
+- **活動開始前 10 分鐘自動 Slack 通知**：提醒使用者即將開始的行程
+- **每日早上 8 點自動檢查**：若 Google Calendar 當天無活動，自動發送 Slack 提醒使用者建立行程
+- **多帳戶支援**：每位使用者可綁定自己的 Slack，接收個人化提醒
+
+---
+## 完成 Slack 串接所需步驟
+
+1. **架設安全資料庫（建議 PostgreSQL）**：儲存每位使用者的 Google refresh_token、Slack ID 等必要資訊，並加密敏感資料。
+2. **n8n workflow 擴充**：
+   - 定時（Cron）檢查每位使用者 Google Calendar
+   - 若無活動，發送 Slack 提醒
+   - 活動開始前 10 分鐘，自動發送 Slack 通知
+3. **Slack Bot 註冊與權限設定**：建立 Slack App，取得 Bot Token，設定正確的 channel/message 權限。
+4. **隱私與安全政策**：明確告知用戶資料用途，提供資料刪除機制，並定期檢查安全性。
+
+---
 ## 聯絡與貢獻
 
-歡迎 issue、pull request 或聯絡 MCP 團隊共同優化！
+歡迎 issue、pull request 或聯絡我 (Sophie / a850132a@gmail.com) 共同優化！

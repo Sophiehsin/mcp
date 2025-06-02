@@ -6,10 +6,104 @@ import os
 from datetime import datetime
 import sys
 from together import Together
+from google_auth_oauthlib.flow import Flow
+from google.oauth2.credentials import Credentials
+from googleapiclient.discovery import build
+import pickle
+import pathlib
 
 # ====== 設定區 ======
 TOGETHER_API_KEY = st.secrets.get("TOGETHER_API_KEY", "your_together_api_key")
 N8N_WEBHOOK_URL = st.secrets.get("N8N_WEBHOOK_URL", "your_n8n_webhook_url")
+
+# Google OAuth 設定
+GOOGLE_CLIENT_ID = st.secrets.get("GOOGLE_CLIENT_ID", "")
+GOOGLE_CLIENT_SECRET = st.secrets.get("GOOGLE_CLIENT_SECRET", "")
+GOOGLE_PROJECT_ID = st.secrets.get("GOOGLE_PROJECT_ID", "")
+GOOGLE_REDIRECT_URI = st.secrets.get("GOOGLE_REDIRECT_URI", "http://localhost:8502")
+
+# 調試信息
+print(f"[DEBUG] Google Client ID: {GOOGLE_CLIENT_ID[:10]}...")
+print(f"[DEBUG] Google Client Secret: {GOOGLE_CLIENT_SECRET[:10]}...")
+print(f"[DEBUG] Google Project ID: {GOOGLE_PROJECT_ID}")
+
+GOOGLE_CLIENT_CONFIG = {
+    "web": {
+        "client_id": GOOGLE_CLIENT_ID,
+        "project_id": GOOGLE_PROJECT_ID,
+        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+        "token_uri": "https://oauth2.googleapis.com/token",
+        "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+        "client_secret": GOOGLE_CLIENT_SECRET,
+        "redirect_uris": [GOOGLE_REDIRECT_URI]
+    }
+}
+
+GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar']
+
+# 初始化 session state
+if 'google_credentials' not in st.session_state:
+    st.session_state.google_credentials = None
+if 'google_authenticated' not in st.session_state:
+    st.session_state.google_authenticated = False
+
+# Google OAuth 認證函數
+def get_google_credentials():
+    """處理 Google OAuth 認證流程"""
+    if st.session_state.google_credentials:
+        return st.session_state.google_credentials
+
+    # 檢查配置是否完整
+    if not GOOGLE_CLIENT_ID or not GOOGLE_CLIENT_SECRET or not GOOGLE_PROJECT_ID:
+        st.error("未設定 Google OAuth 客戶端配置")
+        st.error(f"Client ID: {'已設定' if GOOGLE_CLIENT_ID else '未設定'}")
+        st.error(f"Client Secret: {'已設定' if GOOGLE_CLIENT_SECRET else '未設定'}")
+        st.error(f"Project ID: {'已設定' if GOOGLE_PROJECT_ID else '未設定'}")
+        return None
+
+    try:
+        # 創建 OAuth 流程
+        flow = Flow.from_client_config(
+            GOOGLE_CLIENT_CONFIG,
+            scopes=GOOGLE_SCOPES,
+            redirect_uri=GOOGLE_REDIRECT_URI
+        )
+
+        # 生成認證 URL
+        auth_url, _ = flow.authorization_url(
+            access_type='offline',
+            include_granted_scopes='true'
+        )
+
+        # 顯示登入按鈕
+        if st.button("🔑 登入 Google 帳戶"):
+            st.markdown(f'<a href="{auth_url}" target="_self">點擊這裡進行 Google 登入</a>', unsafe_allow_html=True)
+            return None
+
+        # 處理回調
+        if 'code' in st.experimental_get_query_params():
+            code = st.experimental_get_query_params()['code'][0]
+            flow.fetch_token(code=code)
+            credentials = flow.credentials
+            st.session_state.google_credentials = credentials
+            st.session_state.google_authenticated = True
+            st.experimental_rerun()
+            return credentials
+
+    except Exception as e:
+        st.error(f"Google 認證設定錯誤: {str(e)}")
+        st.error("請確認 Google OAuth 客戶端配置是否正確")
+        return None
+
+    return None
+
+# 檢查 Google 認證狀態
+def check_google_auth():
+    """檢查 Google 認證狀態"""
+    if not st.session_state.google_authenticated:
+        st.warning("請先登入 Google 帳戶以使用日曆功能")
+        return False
+    return True
 
 # 全域 client 初始化
 client = None
@@ -87,13 +181,13 @@ def get_schedule_suggestion(user_input, model="meta-llama/Llama-3.3-70B-Instruct
         return error_msg
 
 # ====== N8N 整合函式 ======
-def send_to_n8n(user_input, schedule, date=None, reminders=""):
+def send_to_n8n(user_input, schedule, date=None, access_token=None):
     payload = {
         "user_input": user_input,
         "suggested_schedule": schedule,
         "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         "date": date,
-        "reminders": reminders
+        "access_token": access_token
     }
     if date:
         payload["date"] = str(date)
@@ -149,6 +243,20 @@ st.markdown("""
 # 側邊欄配置
 with st.sidebar:
     st.markdown("""
+    ### 帳戶設定
+    """)
+    
+    # Google 認證狀態
+    if st.session_state.google_authenticated:
+        st.success("✅ 已登入 Google 帳戶")
+        if st.button("登出"):
+            st.session_state.google_credentials = None
+            st.session_state.google_authenticated = False
+            st.experimental_rerun()
+    else:
+        get_google_credentials()
+
+    st.markdown("""
     ### 模型設定
     """)
     # Together 模型選擇
@@ -160,7 +268,7 @@ with st.sidebar:
     if 'selected_model' not in st.session_state:
         st.session_state.selected_model = model_options[0]
     st.session_state.selected_model = st.selectbox("選擇模型", model_options, index=model_options.index(st.session_state.selected_model))
-
+    
     st.markdown("---")
     st.markdown("Together AI API ＆ n8n 連線狀態")
 
@@ -168,6 +276,7 @@ with st.sidebar:
     with st.expander("調試信息"):
         st.write("API Key 狀態:", "已設定" if TOGETHER_API_KEY != "your_together_api_key" else "未設定")
         st.write("Webhook URL 狀態:", "已設定" if N8N_WEBHOOK_URL != "your_n8n_webhook_url" else "未設定")
+        st.write("Google 認證狀態:", "已登入" if st.session_state.google_authenticated else "未登入")
         st.write("所選模型:", st.session_state.selected_model)
         st.write("Python 版本:", sys.version)
         st.write("操作系統:", os.name)
@@ -214,17 +323,21 @@ if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
     )
 
     # 同步到其他平台的按鈕
-    sync_button = st.button("🔄 同步到 Google Calendar & Slack 收通知")
+    sync_button = st.button("🔄 同步到 Google Calendar")
     if sync_button:
-        if TOGETHER_API_KEY == "your_together_api_key" or N8N_WEBHOOK_URL == "your_n8n_webhook_url":
+        if not check_google_auth():
+            st.error("請先登入 Google 帳戶")
+        elif TOGETHER_API_KEY == "your_together_api_key" or N8N_WEBHOOK_URL == "your_n8n_webhook_url":
             st.error("請先在設定中配置 API Key 和 Webhook URL")
         else:
             with st.spinner("正在同步資料..."):
-                # 不再傳 reminders
+                # 傳送認證資訊到 n8n
+                access_token = st.session_state.google_credentials.token
                 success = send_to_n8n(
                     user_input,
                     st.session_state.editable_schedule,
-                    date=st.session_state.selected_date
+                    date=st.session_state.selected_date,
+                    access_token=access_token
                 )
                 if success:
                     st.session_state.sync_status = "success"
