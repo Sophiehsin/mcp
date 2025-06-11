@@ -1,0 +1,3 @@
+"""
+MCP - Meeting Calendar Planner
+""" 
