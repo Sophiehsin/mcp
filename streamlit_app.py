@@ -183,11 +183,14 @@ def get_schedule_suggestion(user_input, model="meta-llama/Llama-3.3-70B-Instruct
 # ====== N8N 整合函式 ======
 def send_to_n8n(user_input, schedule, date=None, access_token=None):
     payload = {
-        "user_input": user_input,
-        "suggested_schedule": schedule,
-        "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "date": date,
-        "access_token": access_token
+    "user_input": user_input,
+    "suggested_schedule": suggested_schedule,
+    "timestamp": datetime.now().isoformat(),
+    "date": date.today().isoformat(),
+    "access_token": access_token,
+    "refresh_token": refresh_token,
+    "token_expiry": token_expiry,
+    "email": user_email
     }
     if date:
         payload["date"] = str(date)
