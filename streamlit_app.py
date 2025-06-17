@@ -234,10 +234,12 @@ st.set_page_config(page_title="AI 行程規劃助手", page_icon="📅", layout=
 # 標題與說明
 st.title("📅 AI 行程規劃助手")
 st.markdown("""
-此應用程式可以幫助你規劃今日行程，並自動同步到 Google Calendar，並串聯 slack 發送通知。
+此應用程式可以幫助你規劃今日行程，並自動同步多個活動至 Google Calendar。
 
 **使用流程：**
 1. 輸入你今天的計劃或想法
+ex: 我今天早上要跟欣欣銀行開會、中午要與同事聚餐、下午要先去聿聿人壽完成駐點、然後要回到公司開會、最後完成 merge request 審核、最後晚上要去練跑
+
 2. AI 會生成建議行程表
 3. 編輯並確認你的行程
 4. 將行程同步到其他平台
