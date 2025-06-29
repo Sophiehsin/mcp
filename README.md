@@ -8,7 +8,7 @@ Smart Plan 是一個 AI 行程規劃助手，可以協助安排單天的日程�
 
 ## 專案功能試用
 
-網頁連結：https://sophie-hsin.synology.me/streamlit/
+網頁連結：[https://sophie-hsin.synology.me/streamlit/](https://sophie-hsin.synology.me/smart-plan/)
 
 1. 至側邊欄登入你的 Google 帳戶
 2. 在主頁輸入你今天的計劃或想法（列點敘述、口語敘述皆可）
