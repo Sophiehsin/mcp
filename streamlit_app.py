@@ -39,6 +39,16 @@ GOOGLE_CLIENT_CONFIG = {
     }
 }
 
+def convert_datetime(obj):
+    if isinstance(obj, dict):
+        return {k: convert_datetime(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_datetime(i) for i in obj]
+    elif isinstance(obj, datetime):
+        return obj.isoformat()
+    else:
+        return obj
+
 GOOGLE_SCOPES = ['https://www.googleapis.com/auth/calendar']
 
 # 初始化 session state
@@ -181,10 +191,10 @@ def get_schedule_suggestion(user_input, model="meta-llama/Llama-3.3-70B-Instruct
         return error_msg
 
 # ====== N8N 整合函式 ======
-def send_to_n8n(user_input, schedule, date=None, access_token=None):
+def send_to_n8n(user_input, schedule, date=None, access_token=None, refresh_token=None, token_expiry=None, user_email=None):
     payload = {
     "user_input": user_input,
-    "suggested_schedule": suggested_schedule,
+    "suggested_schedule": schedule,
     "timestamp": datetime.now().isoformat(),
     "date": date.today().isoformat(),
     "access_token": access_token,
@@ -197,13 +207,14 @@ def send_to_n8n(user_input, schedule, date=None, access_token=None):
     
     try:
         # 調試信息
-        print(f"[DEBUG] n8n payload size: {len(json.dumps(payload, ensure_ascii=False).encode('utf-8'))} bytes")
+        print(f"[DEBUG] n8n payload size: {len(json.dumps(payload, ensure_ascii=False, default=str).encode('utf-8'))} bytes")
         
         # 設置請求頭 - 確保只使用 ASCII 字符
         headers = {
             "Content-Type": "application/json",
         }
-        
+
+        payload = convert_datetime(payload)
         # 發送請求到 n8n
         response = requests.post(
             N8N_WEBHOOK_URL,
@@ -267,7 +278,7 @@ with st.sidebar:
     # Together 模型選擇
     model_options = [
         "meta-llama/Llama-3.3-70B-Instruct-Turbo-Free",
-        "deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
+        #"deepseek-ai/DeepSeek-R1-Distill-Llama-70B-free",
         "meta-llama/Llama-Vision-Free"
     ]
     if 'selected_model' not in st.session_state:
@@ -339,11 +350,14 @@ if st.session_state.schedule and "API 錯誤" not in st.session_state.schedule:
                 # 傳送認證資訊到 n8n
                 access_token = st.session_state.google_credentials.token
                 success = send_to_n8n(
-                    user_input,
-                    st.session_state.editable_schedule,
-                    date=st.session_state.selected_date,
-                    access_token=access_token
-                )
+                user_input,
+                st.session_state.editable_schedule,
+                date=st.session_state.selected_date,
+                access_token=access_token,
+                refresh_token=st.session_state.google_credentials.refresh_token if st.session_state.google_credentials else None,
+                token_expiry=st.session_state.google_credentials.expiry if st.session_state.google_credentials else None,
+                user_email=st.session_state.google_credentials.id_token.get("email") if st.session_state.google_credentials and st.session_state.google_credentials.id_token else None
+)
                 if success:
                     st.session_state.sync_status = "success"
                     st.success("✅ 成功傳送至 n8n！資料正在自動整合到各平台")
